@@ -1,14 +1,44 @@
+use std::{path::PathBuf, env};
+
 use chess::{Game, util::{Square, File, Rank}};
-use ggez::{ContextBuilder, event, Context, GameResult, graphics, conf::WindowSetup};
+use ggez::{ContextBuilder, event, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, MeshData, Mesh}, conf::WindowSetup};
+
+const SQUARE_SIZE: f32 = 64.0;
 
 struct MainState {
     frames: usize,
+    board: Mesh,
+    black_king_image: Image,
+    black_queen_image: Image,
 }
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let s = MainState { frames: 0 };
-        Ok(s)
+        let black_king_image = Image::from_path(ctx, "/black_king.png")?;
+        let black_queen_image = Image::from_path(ctx, "/black_king.png")?;
+
+        let BLACK_SQUARE_COLOR: Color = Color::from_rgb(120, 100, 80);
+        let WHITE_SQUARE_COLOR: Color = Color::from_rgb(230, 200, 30);
+
+        let mut board_builder = MeshBuilder::new();
+        for i in 0..8 {
+            for j in 0..8 {
+                let color = if (i + j) % 2 == 0 { WHITE_SQUARE_COLOR } else { BLACK_SQUARE_COLOR };
+                board_builder.rectangle(
+                    graphics::DrawMode::Fill(FillOptions::default()),
+                    Rect::new(i as f32 * SQUARE_SIZE, j as f32 * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE),
+                    color
+                ).expect("Failed to draw rectangle.");
+            }
+        }
+        let board = Mesh::from_data(ctx, board_builder.build());
+
+        Ok(MainState {
+            frames: 0,
+            black_king_image,
+            black_queen_image,
+            board,
+        })
     }
 }
 
@@ -29,6 +59,10 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 .set_scale(48.),
             dest_point,
         );
+
+        canvas.draw(&self.board, dest_point);
+
+        canvas.draw(&self.black_king_image, dest_point);
 
         canvas.finish(ctx)?;
 
@@ -61,8 +95,17 @@ fn main() {
         }
     }
 
+    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let mut path = PathBuf::from(manifest_dir);
+        path.push("resources");
+        path
+    } else {
+        PathBuf::from("./resources")
+    };
+
     let builder = ContextBuilder::new("alvinw-chess-gui", "alvinw")
-        .window_setup(WindowSetup::default().title("alvinw-chess-gui"));
+        .window_setup(WindowSetup::default().title("alvinw-chess-gui"))
+        .add_resource_path(resource_dir);
     
     let (mut ctx, event_loop) = builder.build().expect("Failed to start ggez.");
 
