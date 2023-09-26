@@ -1,7 +1,7 @@
 use std::{path::PathBuf, env};
 
-use chess::{Game, util::{Square, File, Rank, Board, BoardMove}, Move, PieceTypes};
-use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh}, conf::{WindowSetup, WindowMode}, glam::Vec2};
+use chess::{Game, util::{Square, File, Rank, Board, BoardMove}, Move, PieceTypes, MoveError};
+use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text}, conf::{WindowSetup, WindowMode}, glam::Vec2};
 
 const SQUARE_SIZE: f32 = 64.0;
 const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
@@ -9,12 +9,13 @@ const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
 struct MainState {
     frames: usize,
     board: Mesh,
+    highlight: Image,
     game: Game,
     board_start: Vec2,
-    highlight_squares: Vec<Square>,
+    possible_moves: Option<BoardMove>,
     white_icons: PieceIcons,
     black_icons: PieceIcons,
-    clicked_square: Option<Square>,
+    latest_error: Option<MoveError>,
 }
 
 struct PieceIcons {
@@ -71,15 +72,18 @@ impl MainState {
         }
         let board = Mesh::from_data(ctx, board_builder.build());
 
+        let highlight = Image::from_color(ctx, SQUARE_SIZE as u32, SQUARE_SIZE as u32, Some(Color::GREEN));
+
         Ok(MainState {
             frames: 0,
             game: Game::new(),
             board,
+            highlight,
             board_start: Vec2::new(0.0, 0.0),
-            highlight_squares: Vec::new(),
-            clicked_square: None,
+            possible_moves: None,
             white_icons,
             black_icons,
+            latest_error: None,
         })
     }
 }
@@ -102,34 +106,47 @@ impl event::EventHandler<ggez::GameError> for MainState {
             dest_point,
         );
 
-        let point = match canvas.screen_coordinates() {
-            None => {
-                Vec2::new(0.0, 0.0)
-            },
+        let screen_coordinates = canvas.screen_coordinates();
+
+        self.board_start = match screen_coordinates {
+            None => Vec2::new(0.0, 0.0),
             Some(rect) => {
                 Vec2::new((rect.w - BOARD_SIZE) / 2.0, (rect.h - BOARD_SIZE) / 2.0)
             }
         };
-        self.board_start = point;
 
-        canvas.draw(&self.board, point);
+        canvas.draw(&self.board, self.board_start);
 
         for (rank_index, row) in self.game.board.rows.squares.iter().enumerate() {
             for (file_index, piece) in row.squares.iter().enumerate() {
                 let square: Square = (file_index as i32, rank_index as i32).try_into().unwrap();
-                let pos = point + Vec2::new(file_index as f32 * SQUARE_SIZE, (7 - rank_index) as f32 * SQUARE_SIZE);
-                if self.highlight_squares.contains(&square) {
-                    let image = Image::from_color(ctx, SQUARE_SIZE as u32, SQUARE_SIZE as u32, Some(Color::GREEN));
-                    canvas.draw(&image, pos);
+                let pos = self.board_start + Vec2::new(file_index as f32 * SQUARE_SIZE, (7 - rank_index) as f32 * SQUARE_SIZE);
+                if let Some(possible_moves) = self.possible_moves {
+                    if possible_moves[square].is_some() {
+                        canvas.draw(&self.highlight, pos);
+                    }
                 }
                 if let Some(piece) = piece {
-                    let image = match piece.color {
-                        chess::Color::White => self.white_icons.get_image(piece.piece),
-                        chess::Color::Black => self.black_icons.get_image(piece.piece),
+                    let icons = match piece.color {
+                        chess::Color::White => &self.white_icons,
+                        chess::Color::Black => &self.black_icons,
                     };
+                    let image = icons.get_image(piece.piece);
                     canvas.draw(image, pos);
                 }
             }
+        }
+
+        if let Some(error) = &self.latest_error {
+            let text = Text::new(error.to_string());
+            let text_size = text.measure(ctx).unwrap();
+            let text_pos = match screen_coordinates {
+                None => Vec2::new(0.0, 0.0),
+                Some(rect) => {
+                    Vec2::new((rect.w - text_size.x) / 2.0, self.board_start.y + (rect.h - self.board_start.y - text_size.y) / 2.0)
+                }
+            };
+            canvas.draw(&text, text_pos);
         }
 
         canvas.finish(ctx)?;
@@ -153,54 +170,28 @@ impl event::EventHandler<ggez::GameError> for MainState {
         let rel_y = y - self.board_start.y;
         let file = (rel_x / SQUARE_SIZE) as i32;
         let rank = 7 - (rel_y / SQUARE_SIZE) as i32;
-        let square = (file, rank).try_into().ok();
+        let square: Option<Square> = (file, rank).try_into().ok();
         println!("Mouse button pressed: {button:?}, x: {file}, y: {rank}");
-
-        /*
-        for (rank_index, row) in self.game.board.rows.squares.iter().enumerate() {
-            for (file_index, piece) in row.squares.iter().enumerate() {
-                if let Some(piece) = piece {
-                    let square: Square = (file_index as i32, rank_index as i32).try_into().unwrap();
-                    let highlight = self.highlight_squares.contains(&square);
-                    println!("At {square:?} there is {:?} {:?} highlight? {highlight}.", piece.color, piece.piece);
-                }
-            }
-        }
-        */
 
         if let Some(square) = square {
             println!("Clicked {square:?}");
-            if let Some(from) = self.clicked_square {
-                let to = square;
-                let result = self.game.try_move(Move::Normal { from, to });
+            if let Some(mv) = self.possible_moves.and_then(|moves| moves[square]) {
+                let result = self.game.try_move(mv);
                 match result {
                     Ok(_) => {
-                        self.clicked_square = None;
+                        self.possible_moves = None;
                     },
                     Err(err) => {
                         println!("error: {err:?}");
+                        self.latest_error = Some(err);
                     },
                 }
-            }
-            self.clicked_square = Some(square);
-            let res = self.game.possible_moves(square, true);
-            if let Ok((board_move, _castling_moves)) = res {
-                let mut possible_moves = Vec::new();
-                for i in board_move.rows.squares {
-                    for j in i.squares {
-                        if let Some(m) = j {
-                            match m {
-                                Move::Normal { from, to } => {
-                                    possible_moves.push(to);
-                                }
-                                _ => (),
-                            }
-                        }
-                    }
-                }
-                self.highlight_squares = possible_moves;
+            } else {
+                let possible_moves = self.game.possible_moves(square, true);
+                self.possible_moves = possible_moves.ok().map(|(board_move, _castling_moves)| board_move);
             }
         }
+
 
         Ok(())
     }
