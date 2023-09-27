@@ -9,7 +9,6 @@ const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
 struct MainState {
     frames: usize,
     board: Mesh,
-    highlight: Image,
     game: Game,
     board_start: Vec2,
     possible_moves: Option<BoardMove>,
@@ -72,13 +71,10 @@ impl MainState {
         }
         let board = Mesh::from_data(ctx, board_builder.build());
 
-        let highlight = Image::from_color(ctx, SQUARE_SIZE as u32, SQUARE_SIZE as u32, Some(Color::GREEN));
-
         Ok(MainState {
             frames: 0,
             game: Game::new(),
             board,
-            highlight,
             board_start: Vec2::new(0.0, 0.0),
             possible_moves: None,
             white_icons,
@@ -96,16 +92,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas =
             graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
-
-        // Text is drawn from the top-left corner.
-        let offset = self.frames as f32 / 10.0;
-        let dest_point = ggez::glam::Vec2::new(offset, offset);
-        canvas.draw(
-            graphics::Text::new("Hello, world!")
-                .set_scale(48.),
-            dest_point,
-        );
-
+        
         let screen_coordinates = canvas.screen_coordinates();
 
         self.board_start = match screen_coordinates {
@@ -121,11 +108,6 @@ impl event::EventHandler<ggez::GameError> for MainState {
             for (file_index, piece) in row.squares.iter().enumerate() {
                 let square: Square = (file_index as i32, rank_index as i32).try_into().unwrap();
                 let pos = self.board_start + Vec2::new(file_index as f32 * SQUARE_SIZE, (7 - rank_index) as f32 * SQUARE_SIZE);
-                if let Some(possible_moves) = self.possible_moves {
-                    if possible_moves[square].is_some() {
-                        canvas.draw(&self.highlight, pos);
-                    }
-                }
                 if let Some(piece) = piece {
                     let icons = match piece.color {
                         chess::Color::White => &self.white_icons,
@@ -133,6 +115,23 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     };
                     let image = icons.get_image(piece.piece);
                     canvas.draw(image, pos);
+                }
+                if let Some(possible_moves) = self.possible_moves {
+                    if possible_moves[square].is_some() {
+                        let sin = ((self.frames as f64) / 25.0).sin() + 1.0;
+                        let green = (sin * 32.0) as u8 + 192;
+                        let radius = (sin * 2.0 + 16.0) as f32;
+                        let color = Color::from_rgb(0, green, 0);
+                        let mesh = Mesh::from_data(ctx, MeshBuilder::new().circle(
+                            graphics::DrawMode::Fill(FillOptions::default()),
+                            Vec2::new(32.0, 32.0),
+                            radius,
+                            0.5,
+                            color
+                        ).unwrap().build());
+                        let highlight = Image::from_color(ctx, SQUARE_SIZE as u32, SQUARE_SIZE as u32, Some(color));
+                        canvas.draw(&mesh, pos);
+                    }
                 }
             }
         }
@@ -142,12 +141,19 @@ impl event::EventHandler<ggez::GameError> for MainState {
             let text_size = text.measure(ctx).unwrap();
             let text_pos = match screen_coordinates {
                 None => Vec2::new(0.0, 0.0),
-                Some(rect) => {
-                    Vec2::new((rect.w - text_size.x) / 2.0, self.board_start.y + (rect.h - self.board_start.y - text_size.y) / 2.0)
+                Some(screen) => {
+                    let board_end = self.board_start.y + BOARD_SIZE;
+                    Vec2::new(
+                        (screen.w - text_size.x) / 2.0,
+                        board_end + (screen.h - board_end - text_size.y) / 2.0
+                    )
                 }
             };
             canvas.draw(&text, text_pos);
         }
+
+        let color_text = if self.game.turn == chess::Color::White { "white" } else { "black" };
+        canvas.draw(&Text::new(format!("{color_text}'s turn")), Vec2::new(20.0, 40.0));
 
         canvas.finish(ctx)?;
 
@@ -180,9 +186,9 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 match result {
                     Ok(_) => {
                         self.possible_moves = None;
+                        self.latest_error = None;
                     },
                     Err(err) => {
-                        println!("error: {err:?}");
                         self.latest_error = Some(err);
                     },
                 }
@@ -199,31 +205,6 @@ impl event::EventHandler<ggez::GameError> for MainState {
 }
 
 fn main() {
-    let mut game = Game::new();
-
-    game.try_move(Move::Normal { from: Square {
-        file: File::F, rank: Rank::R2,
-    }, to: Square {
-        file: File::F, rank: Rank::R3,
-    } }).unwrap();
-
-    let square = Square { file: File::F, rank: Rank::R3 };
-
-    let moves = game.possible_moves(square, true).unwrap();
-    
-    let (board_move, vec_moves) = moves;
-    
-    // println!("{:?}", boardMove);
-    println!("vec_moves = {:?}", vec_moves);
-
-    for a in board_move.rows.squares {
-        for b in a.squares {
-            if let Some(m) = b {
-                println!("{:?}", m);
-            }
-        }
-    }
-
     let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = PathBuf::from(manifest_dir);
         path.push("resources");
