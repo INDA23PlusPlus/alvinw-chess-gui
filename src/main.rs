@@ -1,6 +1,6 @@
 use std::{path::PathBuf, env};
 
-use chess::{Game, util::{Square, BoardMove}, PieceTypes, MoveError};
+use chess::{Game, util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move};
 use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
 
 const SQUARE_SIZE: f32 = 64.0;
@@ -16,6 +16,7 @@ struct MainState {
     white_icons: PieceIcons,
     black_icons: PieceIcons,
     latest_error: Option<MoveError>,
+    promotion_square: Option<Square>,
 }
 
 struct PieceIcons {
@@ -82,6 +83,7 @@ impl MainState {
             white_icons,
             black_icons,
             latest_error: None,
+            promotion_square: None,
         })
     }
 }
@@ -152,6 +154,19 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
         }
 
+        if let Some(promotion_square) = self.promotion_square {
+            let width = 400.0 * scale;
+            let height = 200.0 * scale;
+            let pos = self.board_start + Vec2::new
+                ((BOARD_SIZE * scale - width) / 2.0,
+                0.0
+            );
+            let mut mesh = MeshBuilder::new();
+            mesh.rectangle(graphics::DrawMode::Fill(FillOptions::default()), Rect::new(0.0, 0.0, width, 200.0), Color::BLACK).expect("Failed to draw rectangle.");
+            let mesh = Mesh::from_data(ctx, mesh.build());
+            canvas.draw(&mesh, pos);
+        }
+
         if let Some(error) = &self.latest_error {
             let mut text = Text::new(error.to_string());
             text.set_scale(16.0 * self.scale);
@@ -170,7 +185,9 @@ impl event::EventHandler<ggez::GameError> for MainState {
         }
 
         let color_text = if self.game.turn == chess::Color::White { "white" } else { "black" };
-        canvas.draw(&Text::new(format!("{color_text}'s turn")), Vec2::new(20.0, 40.0));
+        let mut color_text = Text::new(format!("{color_text}'s turn"));
+        color_text.set_scale(16.0 * self.scale);
+        canvas.draw(&color_text, Vec2::new(20.0, 40.0));
 
         canvas.finish(ctx)?;
 
@@ -204,6 +221,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
                     Ok(_) => {
                         self.possible_moves = None;
                         self.latest_error = None;
+                        match mv {
+                            Move::Normal { from: _, to } => {
+                                if to.rank == Rank::R1 || to.rank == Rank::R8 {
+                                    // Promotion
+                                    self.promotion_square = Some(to);
+                                }
+                            },
+                            _ => {},
+                        }
                     },
                     Err(err) => {
                         self.latest_error = Some(err);
