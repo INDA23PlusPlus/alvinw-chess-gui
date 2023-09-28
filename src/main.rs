@@ -1,7 +1,7 @@
 use std::{path::PathBuf, env};
 
-use chess::{Game, util::{Square, File, Rank, Board, BoardMove}, Move, PieceTypes, MoveError};
-use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text}, conf::{WindowSetup, WindowMode}, glam::Vec2};
+use chess::{Game, util::{Square, BoardMove}, PieceTypes, MoveError};
+use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
 
 const SQUARE_SIZE: f32 = 64.0;
 const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
@@ -11,6 +11,7 @@ struct MainState {
     board: Mesh,
     game: Game,
     board_start: Vec2,
+    scale: f32,
     possible_moves: Option<BoardMove>,
     white_icons: PieceIcons,
     black_icons: PieceIcons,
@@ -76,6 +77,7 @@ impl MainState {
             game: Game::new(),
             board,
             board_start: Vec2::new(0.0, 0.0),
+            scale: 1.0,
             possible_moves: None,
             white_icons,
             black_icons,
@@ -95,26 +97,41 @@ impl event::EventHandler<ggez::GameError> for MainState {
         
         let screen_coordinates = canvas.screen_coordinates();
 
+        let mut scale = 1_f32;
+        if let Some(screen) = screen_coordinates {
+            loop {
+                let next_size = BOARD_SIZE * (scale + 1.0);
+                if next_size > screen.w || next_size > screen.h {
+                    break;
+                }
+                scale += 1.0;
+            }
+        }
+        self.scale = scale;
+        let scale_vec = Vec2::new(scale, scale);
+
         self.board_start = match screen_coordinates {
             None => Vec2::new(0.0, 0.0),
             Some(rect) => {
-                Vec2::new((rect.w - BOARD_SIZE) / 2.0, (rect.h - BOARD_SIZE) / 2.0)
+                Vec2::new((rect.w - BOARD_SIZE * scale) / 2.0, (rect.h - BOARD_SIZE * scale) / 2.0)
             }
         };
 
-        canvas.draw(&self.board, self.board_start);
+        let params = DrawParam::new().dest(self.board_start).scale(scale_vec);
+        canvas.draw(&self.board, params);
 
         for (rank_index, row) in self.game.board.rows.squares.iter().enumerate() {
             for (file_index, piece) in row.squares.iter().enumerate() {
                 let square: Square = (file_index as i32, rank_index as i32).try_into().unwrap();
-                let pos = self.board_start + Vec2::new(file_index as f32 * SQUARE_SIZE, (7 - rank_index) as f32 * SQUARE_SIZE);
+                let pos = self.board_start + Vec2::new(file_index as f32 * SQUARE_SIZE * scale, (7 - rank_index) as f32 * SQUARE_SIZE * scale);
+                let draw_param = DrawParam::new().dest(pos).scale(scale_vec);
                 if let Some(piece) = piece {
                     let icons = match piece.color {
                         chess::Color::White => &self.white_icons,
                         chess::Color::Black => &self.black_icons,
                     };
                     let image = icons.get_image(piece.piece);
-                    canvas.draw(image, pos);
+                    canvas.draw(image, draw_param);
                 }
                 if let Some(possible_moves) = self.possible_moves {
                     if possible_moves[square].is_some() {
@@ -129,20 +146,20 @@ impl event::EventHandler<ggez::GameError> for MainState {
                             0.5,
                             color
                         ).unwrap().build());
-                        let highlight = Image::from_color(ctx, SQUARE_SIZE as u32, SQUARE_SIZE as u32, Some(color));
-                        canvas.draw(&mesh, pos);
+                        canvas.draw(&mesh, draw_param);
                     }
                 }
             }
         }
 
         if let Some(error) = &self.latest_error {
-            let text = Text::new(error.to_string());
+            let mut text = Text::new(error.to_string());
+            text.set_scale(16.0 * self.scale);
             let text_size = text.measure(ctx).unwrap();
             let text_pos = match screen_coordinates {
                 None => Vec2::new(0.0, 0.0),
                 Some(screen) => {
-                    let board_end = self.board_start.y + BOARD_SIZE;
+                    let board_end = self.board_start.y + BOARD_SIZE * scale;
                     Vec2::new(
                         (screen.w - text_size.x) / 2.0,
                         board_end + (screen.h - board_end - text_size.y) / 2.0
@@ -174,8 +191,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
     ) -> GameResult {
         let rel_x = x - self.board_start.x;
         let rel_y = y - self.board_start.y;
-        let file = (rel_x / SQUARE_SIZE) as i32;
-        let rank = 7 - (rel_y / SQUARE_SIZE) as i32;
+        let file = (rel_x / SQUARE_SIZE / self.scale) as i32;
+        let rank = 7 - (rel_y / SQUARE_SIZE / self.scale) as i32;
         let square: Option<Square> = (file, rank).try_into().ok();
         println!("Mouse button pressed: {button:?}, x: {file}, y: {rank}");
 
