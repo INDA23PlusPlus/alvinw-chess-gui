@@ -1,10 +1,16 @@
 use std::{path::PathBuf, env};
 
-use chess::{Game, util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, Piece};
+use chess::{Game, util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, Piece, CastlingSide};
 use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
 
 const SQUARE_SIZE: f32 = 64.0;
 const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
+
+struct CastlingPossibility {
+    _color: chess::Color,
+    kingside: bool,
+    queenside: bool,
+}
 
 struct MainState {
     frames: usize,
@@ -13,6 +19,7 @@ struct MainState {
     board_start: Vec2,
     scale: f32,
     possible_moves: Option<BoardMove>,
+    possible_castling: Option<CastlingPossibility>,
     white_icons: PieceIcons,
     black_icons: PieceIcons,
     latest_error: Option<MoveError>,
@@ -89,6 +96,7 @@ impl MainState {
             board_start: Vec2::new(0.0, 0.0),
             scale: 1.0,
             possible_moves: None,
+            possible_castling: None,
             white_icons,
             black_icons,
             latest_error: None,
@@ -164,6 +172,19 @@ impl event::EventHandler<ggez::GameError> for MainState {
             }
         }
 
+        if let Some(possible_castling) = &self.possible_castling {
+            // TODO implement when backend stops panicking when castling is possible.
+            if possible_castling.queenside {
+                let mesh = Mesh::from_data(ctx, MeshBuilder::new().rectangle(
+                    graphics::DrawMode::Fill(FillOptions::default()),
+                    Rect::new(32.0, 32.0, 100.0, 10.0),
+                    Color::BLACK,
+                ).unwrap().build());
+                let draw_param = DrawParam::new().dest(self.board_start - Vec2::new(-100.0, 0.0));
+                canvas.draw(&mesh, draw_param);
+            }
+        }
+
         if let Some(promotion_square) = self.promotion_square {
             let width = ((SQUARE_SIZE + 4.0) * 4.0) * scale;
             let height = (SQUARE_SIZE + 8.0) * scale;
@@ -204,6 +225,19 @@ impl event::EventHandler<ggez::GameError> for MainState {
             canvas.draw(piece_icons.get_image(PieceTypes::Knight), params);
 
             self.promotion_coordinates = Some(PromotionCoordinates { queen_pos, bishop_pos, rook_pos, knight_pos });
+        }
+
+        if self.game.check {
+            let mut text = Text::new("check");
+            text.set_scale(16.0 * scale);
+            let sin = ((self.frames as f64) / 25.0).sin() + 1.0;
+            let color_value = (sin * 128.0) as u8;
+            let color = Color::from_rgb(255, color_value, color_value);
+            let text_size = text.measure(ctx).expect("measure");
+            let pos = Vec2::new(self.board_start.x + (BOARD_SIZE * scale - text_size.x) / 2.0, self.board_start.y - (20.0 * scale));
+            let param = DrawParam::new().dest(pos).color(color);
+            canvas.draw(&text, param);
+
         }
 
         if let Some(error) = &self.latest_error {
@@ -295,6 +329,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 match result {
                     Ok(_) => {
                         self.possible_moves = None;
+                        self.possible_castling = None;
                         self.latest_error = None;
                         match mv {
                             Move::Normal { from: _, to } => {
@@ -313,7 +348,33 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 }
             } else {
                 let possible_moves = self.game.possible_moves(square, true);
-                self.possible_moves = possible_moves.ok().map(|(board_move, _castling_moves)| board_move);
+                match possible_moves {
+                    Ok(possible_moves) => {
+                        let (board_move, castling_moves) = possible_moves;
+                        self.possible_moves = Some(board_move);
+                        
+                        let color = self.game.board[square].map_or(chess::Color::White, |piece| piece.color);
+                        let mut possible_castling = CastlingPossibility {
+                            _color: color,
+                            kingside: false,
+                            queenside: false,
+                        };
+                        for mv in castling_moves {
+                            if let Move::Castle { side } = mv {
+                                if side == CastlingSide::KingSide {
+                                    possible_castling.kingside = true;
+                                }
+                                if side == CastlingSide::QueenSide {
+                                    possible_castling.queenside = true;
+                                }
+                            }
+                        }
+                        self.possible_castling = Some(possible_castling);
+                    },
+                    Err(err) => {
+                        self.latest_error = Some(err);
+                    },
+                }
             }
         }
 
