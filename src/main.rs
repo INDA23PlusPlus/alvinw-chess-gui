@@ -1,6 +1,6 @@
 use std::{path::PathBuf, env};
 
-use chess::{Game, util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move};
+use chess::{Game, util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, Piece};
 use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
 
 const SQUARE_SIZE: f32 = 64.0;
@@ -17,6 +17,7 @@ struct MainState {
     black_icons: PieceIcons,
     latest_error: Option<MoveError>,
     promotion_square: Option<Square>,
+    promotion_coordinates: Option<PromotionCoordinates>,
 }
 
 struct PieceIcons {
@@ -26,6 +27,14 @@ struct PieceIcons {
     rook: Image,
     knight: Image,
     pawn: Image,
+}
+
+/// The screen coordinates where the promotion GUI is.
+struct PromotionCoordinates {
+    queen_pos: Vec2,
+    bishop_pos: Vec2,
+    rook_pos: Vec2,
+    knight_pos: Vec2,
 }
 
 impl PieceIcons {
@@ -84,6 +93,7 @@ impl MainState {
             black_icons,
             latest_error: None,
             promotion_square: None,
+            promotion_coordinates: None,
         })
     }
 }
@@ -155,16 +165,45 @@ impl event::EventHandler<ggez::GameError> for MainState {
         }
 
         if let Some(promotion_square) = self.promotion_square {
-            let width = 400.0 * scale;
-            let height = 200.0 * scale;
-            let pos = self.board_start + Vec2::new
-                ((BOARD_SIZE * scale - width) / 2.0,
-                0.0
+            let width = ((SQUARE_SIZE + 4.0) * 4.0) * scale;
+            let height = (SQUARE_SIZE + 8.0) * scale;
+            let pos = self.board_start + Vec2::new(
+                (BOARD_SIZE * scale - width) / 2.0,
+                (BOARD_SIZE * scale - height) / 2.0,
             );
+
+            let color = self.game.board[promotion_square].map_or(chess::Color::White, |piece| piece.color);
+            let piece_icons = match color {
+                chess::Color::White => &self.white_icons,
+                chess::Color::Black => &self.black_icons,
+            };
+
             let mut mesh = MeshBuilder::new();
-            mesh.rectangle(graphics::DrawMode::Fill(FillOptions::default()), Rect::new(0.0, 0.0, width, 200.0), Color::BLACK).expect("Failed to draw rectangle.");
+            mesh.rectangle(
+                graphics::DrawMode::Fill(FillOptions::default()),
+                Rect::new(0.0, 0.0, width, height),
+                if color == chess::Color::White { Color::BLACK } else { Color::WHITE }
+            ).expect("Failed to draw rectangle.");
             let mesh = Mesh::from_data(ctx, mesh.build());
             canvas.draw(&mesh, pos);
+
+            let queen_pos = pos + Vec2::new(4.0 * scale, 4.0 * scale);
+            let params = DrawParam::new().dest(queen_pos).scale(scale_vec);
+            canvas.draw(piece_icons.get_image(PieceTypes::Queen), params);
+
+            let bishop_pos = pos + Vec2::new(SQUARE_SIZE * scale + 8.0 * scale, 4.0 * scale);
+            let params = DrawParam::new().dest(bishop_pos).scale(scale_vec);
+            canvas.draw(piece_icons.get_image(PieceTypes::Bishop), params);
+
+            let rook_pos = pos + Vec2::new(2.0 * SQUARE_SIZE * scale + 16.0 * scale, 4.0 * scale);
+            let params = DrawParam::new().dest(rook_pos).scale(scale_vec);
+            canvas.draw(piece_icons.get_image(PieceTypes::Rook), params);
+            
+            let knight_pos = pos + Vec2::new(3.0 * SQUARE_SIZE * scale + 24.0 * scale, 4.0 * scale);
+            let params = DrawParam::new().dest(knight_pos).scale(scale_vec);
+            canvas.draw(piece_icons.get_image(PieceTypes::Knight), params);
+
+            self.promotion_coordinates = Some(PromotionCoordinates { queen_pos, bishop_pos, rook_pos, knight_pos });
         }
 
         if let Some(error) = &self.latest_error {
@@ -193,7 +232,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
 
         self.frames += 1;
         if (self.frames % 100) == 0 {
-            println!("FPS: {}", ctx.time.fps());
+            println!("FPS: {:.2}", ctx.time.fps());
         }
 
         Ok(())
@@ -206,6 +245,42 @@ impl event::EventHandler<ggez::GameError> for MainState {
         x: f32,
         y: f32,
     ) -> GameResult {
+        if let (Some(promotion_square), Some(coords)) = (self.promotion_square, &self.promotion_coordinates) {
+            let size = SQUARE_SIZE * self.scale;
+            let clicked_inside = |piece_pos: Vec2| -> bool {
+                x > piece_pos.x && x < piece_pos.x + size
+                && y > piece_pos.y && y < piece_pos.y + size
+            };
+            let mut promoted = false;
+            let mut promote = |piece_type: PieceTypes| {
+                println!("promoting to {piece_type:?}");
+                let color = self.game.board[promotion_square].map_or(chess::Color::White, |piece| piece.color);
+                self.game.board[promotion_square] = Some(Piece { piece: piece_type, color: color });
+                promoted = true;
+            };
+
+            if clicked_inside(coords.queen_pos) {
+                promote(PieceTypes::Queen);
+            }
+            if clicked_inside(coords.bishop_pos) {
+                promote(PieceTypes::Bishop);
+            }
+            if clicked_inside(coords.rook_pos) {
+                promote(PieceTypes::Rook);
+            }
+            if clicked_inside(coords.knight_pos) {
+                promote(PieceTypes::Knight);
+            }
+
+            if promoted {
+                self.promotion_square = None;
+                self.promotion_coordinates = None;
+            }
+
+            // While the promotion gui is open no other moves can be made.
+            return Ok(());
+        }
+
         let rel_x = x - self.board_start.x;
         let rel_y = y - self.board_start.y;
         let file = (rel_x / SQUARE_SIZE / self.scale) as i32;
@@ -223,7 +298,8 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         self.latest_error = None;
                         match mv {
                             Move::Normal { from: _, to } => {
-                                if to.rank == Rank::R1 || to.rank == Rank::R8 {
+                                let is_pawn: bool = self.game.board[to].map_or(false, |piece| piece.piece == PieceTypes::Pawn(true));
+                                if (to.rank == Rank::R1 || to.rank == Rank::R8) && is_pawn {
                                     // Promotion
                                     self.promotion_square = Some(to);
                                 }
