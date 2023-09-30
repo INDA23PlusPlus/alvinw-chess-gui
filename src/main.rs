@@ -1,28 +1,32 @@
 use std::{path::PathBuf, env};
 
-use chess::{Game, util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, Piece, CastlingSide};
 use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
+use bridge::{PieceType, Move};
+use bridge::Square;
+
+mod bridge;
+mod erikfran_chess;
 
 const SQUARE_SIZE: f32 = 64.0;
 const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
 
 struct CastlingPossibility {
-    _color: chess::Color,
+    _color: erikfran_chess::Color,
     kingside: bool,
     queenside: bool,
 }
 
-struct MainState {
+struct MainState<T: bridge::ChessGame> {
     frames: usize,
     board: Mesh,
-    game: Game,
+    game: T,
     board_start: Vec2,
     scale: f32,
-    possible_moves: Option<BoardMove>,
+    possible_moves: Option<Move>,
     possible_castling: Option<CastlingPossibility>,
     white_icons: PieceIcons,
     black_icons: PieceIcons,
-    latest_error: Option<MoveError>,
+    latest_error: Option<String>,
     promotion_square: Option<Square>,
     promotion_coordinates: Option<PromotionCoordinates>,
 }
@@ -56,20 +60,20 @@ impl PieceIcons {
         })
     }
 
-    fn get_image(&self, piece_type: PieceTypes) -> &Image {
+    fn get_image(&self, piece_type: PieceType) -> &Image {
         match piece_type {
-            PieceTypes::King => &self.king,
-            PieceTypes::Queen => &self.queen,
-            PieceTypes::Bishop => &self.bishop,
-            PieceTypes::Rook => &self.rook,
-            PieceTypes::Knight => &self.knight,
-            PieceTypes::Pawn(_) => &self.pawn,
+            PieceType::King => &self.king,
+            PieceType::Queen => &self.queen,
+            PieceType::Bishop => &self.bishop,
+            PieceType::Rook => &self.rook,
+            PieceType::Knight => &self.knight,
+            PieceType::Pawn => &self.pawn,
         }
     }
 }
 
-impl MainState {
-    fn new(ctx: &mut Context) -> GameResult<MainState> {
+impl<T: bridge::ChessGame> MainState<T> {
+    fn new(ctx: &mut Context, game: T) -> GameResult<MainState<T>> {
         let white_icons = PieceIcons::new(ctx, "white")?;
         let black_icons = PieceIcons::new(ctx, "black")?;
 
@@ -91,7 +95,7 @@ impl MainState {
 
         Ok(MainState {
             frames: 0,
-            game: Game::new(),
+            game,
             board,
             board_start: Vec2::new(0.0, 0.0),
             scale: 1.0,
@@ -106,7 +110,7 @@ impl MainState {
     }
 }
 
-impl event::EventHandler<ggez::GameError> for MainState {
+impl<T: bridge::ChessGame> event::EventHandler<ggez::GameError> for MainState<T> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         Ok(())
     }
@@ -140,15 +144,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
         let params = DrawParam::new().dest(self.board_start).scale(scale_vec);
         canvas.draw(&self.board, params);
 
-        for (rank_index, row) in self.game.board.rows.squares.iter().enumerate() {
-            for (file_index, piece) in row.squares.iter().enumerate() {
-                let square: Square = (file_index as i32, rank_index as i32).try_into().unwrap();
+        for (rank_index, row) in self.game.get_pieces().iter().enumerate() {
+            for (file_index, piece) in row.iter().enumerate() {
+                let square = Square::new(file_index, rank_index);
                 let pos = self.board_start + Vec2::new(file_index as f32 * SQUARE_SIZE * scale, (7 - rank_index) as f32 * SQUARE_SIZE * scale);
                 let draw_param = DrawParam::new().dest(pos).scale(scale_vec);
                 if let Some(piece) = piece {
                     let icons = match piece.color {
-                        chess::Color::White => &self.white_icons,
-                        chess::Color::Black => &self.black_icons,
+                        bridge::Color::White => &self.white_icons,
+                        bridge::Color::Black => &self.black_icons,
                     };
                     let image = icons.get_image(piece.piece);
                     canvas.draw(image, draw_param);
@@ -193,41 +197,41 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 (BOARD_SIZE * scale - height) / 2.0,
             );
 
-            let color = self.game.board[promotion_square].map_or(chess::Color::White, |piece| piece.color);
+            let color = self.game.get_piece(promotion_square.0, promotion_square.1).map_or(bridge::Color::White, |piece| piece.color);
             let piece_icons = match color {
-                chess::Color::White => &self.white_icons,
-                chess::Color::Black => &self.black_icons,
+                bridge::Color::White => &self.white_icons,
+                bridge::Color::Black => &self.black_icons,
             };
 
             let mut mesh = MeshBuilder::new();
             mesh.rectangle(
                 graphics::DrawMode::Fill(FillOptions::default()),
                 Rect::new(0.0, 0.0, width, height),
-                if color == chess::Color::White { Color::BLACK } else { Color::WHITE }
+                if color == bridge::Color::White { Color::BLACK } else { Color::WHITE }
             ).expect("Failed to draw rectangle.");
             let mesh = Mesh::from_data(ctx, mesh.build());
             canvas.draw(&mesh, pos);
 
             let queen_pos = pos + Vec2::new(4.0 * scale, 4.0 * scale);
             let params = DrawParam::new().dest(queen_pos).scale(scale_vec);
-            canvas.draw(piece_icons.get_image(PieceTypes::Queen), params);
+            canvas.draw(piece_icons.get_image(bridge::PieceType::Queen), params);
 
             let bishop_pos = pos + Vec2::new(SQUARE_SIZE * scale + 8.0 * scale, 4.0 * scale);
             let params = DrawParam::new().dest(bishop_pos).scale(scale_vec);
-            canvas.draw(piece_icons.get_image(PieceTypes::Bishop), params);
+            canvas.draw(piece_icons.get_image(bridge::PieceType::Bishop), params);
 
             let rook_pos = pos + Vec2::new(2.0 * SQUARE_SIZE * scale + 16.0 * scale, 4.0 * scale);
             let params = DrawParam::new().dest(rook_pos).scale(scale_vec);
-            canvas.draw(piece_icons.get_image(PieceTypes::Rook), params);
+            canvas.draw(piece_icons.get_image(bridge::PieceType::Rook), params);
             
             let knight_pos = pos + Vec2::new(3.0 * SQUARE_SIZE * scale + 24.0 * scale, 4.0 * scale);
             let params = DrawParam::new().dest(knight_pos).scale(scale_vec);
-            canvas.draw(piece_icons.get_image(PieceTypes::Knight), params);
+            canvas.draw(piece_icons.get_image(bridge::PieceType::Knight), params);
 
             self.promotion_coordinates = Some(PromotionCoordinates { queen_pos, bishop_pos, rook_pos, knight_pos });
         }
 
-        if self.game.check {
+        if self.game.is_check() {
             let mut text = Text::new("check");
             text.set_scale(16.0 * scale);
             let sin = ((self.frames as f64) / 25.0).sin() + 1.0;
@@ -257,7 +261,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             canvas.draw(&text, text_pos);
         }
 
-        let color_text = if self.game.turn == chess::Color::White { "white" } else { "black" };
+        let color_text = if self.game.current_turn() == bridge::Color::White { "white" } else { "black" };
         let mut color_text = Text::new(format!("{color_text}'s turn"));
         color_text.set_scale(16.0 * self.scale);
         canvas.draw(&color_text, Vec2::new(20.0, 40.0));
@@ -286,24 +290,23 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 && y > piece_pos.y && y < piece_pos.y + size
             };
             let mut promoted = false;
-            let mut promote = |piece_type: PieceTypes| {
+            let mut promote = |piece_type: PieceType| {
                 println!("promoting to {piece_type:?}");
-                let color = self.game.board[promotion_square].map_or(chess::Color::White, |piece| piece.color);
-                self.game.board[promotion_square] = Some(Piece { piece: piece_type, color: color });
+                self.game.promote(piece_type);
                 promoted = true;
             };
 
             if clicked_inside(coords.queen_pos) {
-                promote(PieceTypes::Queen);
+                promote(PieceType::Queen);
             }
             if clicked_inside(coords.bishop_pos) {
-                promote(PieceTypes::Bishop);
+                promote(PieceType::Bishop);
             }
             if clicked_inside(coords.rook_pos) {
-                promote(PieceTypes::Rook);
+                promote(PieceType::Rook);
             }
             if clicked_inside(coords.knight_pos) {
-                promote(PieceTypes::Knight);
+                promote(PieceType::Knight);
             }
 
             if promoted {
@@ -353,7 +356,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         let (board_move, castling_moves) = possible_moves;
                         self.possible_moves = Some(board_move);
                         
-                        let color = self.game.board[square].map_or(chess::Color::White, |piece| piece.color);
+                        let color = self.game.board[square].map_or(erikfran_chess::Color::White, |piece| piece.color);
                         let mut possible_castling = CastlingPossibility {
                             _color: color,
                             kingside: false,
@@ -402,6 +405,8 @@ fn main() {
     
     let (mut ctx, event_loop) = builder.build().expect("Failed to start ggez.");
 
-    let state = MainState::new(&mut ctx).expect("Failed to create MainState.");
+    let game = erikfran_chess::Game::new();
+
+    let state = MainState::new(&mut ctx, game).expect("Failed to create MainState.");
     event::run(ctx, event_loop, state);
 }
