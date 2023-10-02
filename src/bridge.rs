@@ -2,6 +2,7 @@
 //! regardless of backend.
 
 use erikfran_chess::{Piece, util::{Square, BoardMove}, Color, Move, PieceTypes, MoveError};
+use crate::server::ServerGame;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameState {
@@ -25,4 +26,7 @@ pub trait ChessGame {
     fn possible_moves(&mut self, at: Square) -> Result<(BoardMove, Vec<Move>), MoveError>;
 
     fn perform_move(&mut self, mv: Move) -> Result<(), MoveError>;
+
+    /// Get the ServerGame instance of the game is running as a server.
+    fn get_if_server(&mut self) -> Option<&mut ServerGame>;
 }

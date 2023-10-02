@@ -2,9 +2,11 @@ use std::{path::PathBuf, env};
 
 use erikfran_chess::{util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, CastlingSide};
 use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
+use crate::server::{ProtocolState, ServerGame};
 
 mod bridge;
 mod erikfran_chess_impl;
+mod server;
 
 const SQUARE_SIZE: f32 = 64.0;
 const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
@@ -111,6 +113,13 @@ impl<T: bridge::ChessGame> MainState<T> {
 
 impl<T: bridge::ChessGame> event::EventHandler<ggez::GameError> for MainState<T> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
+        if let Some(server_game) = self.game.get_if_server() {
+            match server_game.get_protocol_state() {
+                ProtocolState::NotConnected => server_game.try_accept_client(),
+                ProtocolState::Handshake => server_game.try_handshake(),
+                _ => {},
+            }
+        }
         Ok(())
     }
 
@@ -405,7 +414,8 @@ fn main() {
     let (mut ctx, event_loop) = builder.build().expect("Failed to start ggez.");
 
     let game = erikfran_chess::Game::new();
+    let server_game = server::ServerGame::new(game, 8384);
 
-    let state = MainState::new(&mut ctx, game).expect("Failed to create MainState.");
+    let state = MainState::new(&mut ctx, server_game).expect("Failed to create MainState.");
     event::run(ctx, event_loop, state);
 }

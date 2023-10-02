@@ -1,6 +1,7 @@
 use erikfran_chess::{Piece, util::{Square, BoardMove}, Color, PieceTypes, Move, MoveError};
 
 use crate::bridge::{self, GameState};
+use crate::server::ServerGame;
 
 impl bridge::ChessGame for erikfran_chess::Game {
     fn get_pieces(&self) -> [[Option<Piece>; 8]; 8] {
@@ -50,5 +51,9 @@ impl bridge::ChessGame for erikfran_chess::Game {
 
     fn perform_move(&mut self, mv: Move) -> Result<(), MoveError> {
         self.try_move(mv)
+    }
+
+    fn get_if_server(&mut self) -> Option<&mut ServerGame> {
+        None
     }
 }
