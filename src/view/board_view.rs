@@ -1,12 +1,8 @@
-use std::{path::PathBuf, env};
-
 use erikfran_chess::{util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, CastlingSide};
 use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
+use crate::bridge;
 use crate::server::{ProtocolState, ServerGame};
-
-mod bridge;
-mod erikfran_chess_impl;
-mod server;
+use crate::view::View;
 
 const SQUARE_SIZE: f32 = 64.0;
 const BOARD_SIZE: f32 = SQUARE_SIZE * 8.0;
@@ -17,7 +13,7 @@ struct CastlingPossibility {
     queenside: bool,
 }
 
-struct MainState<T: bridge::ChessGame> {
+pub struct BoardView<T: bridge::ChessGame> {
     frames: usize,
     board: Mesh,
     game: T,
@@ -73,8 +69,8 @@ impl PieceIcons {
     }
 }
 
-impl<T: bridge::ChessGame> MainState<T> {
-    fn new(ctx: &mut Context, game: T) -> GameResult<MainState<T>> {
+impl<T: bridge::ChessGame> BoardView<T> {
+    pub fn new(ctx: &mut Context, game: T) -> GameResult<BoardView<T>> {
         let white_icons = PieceIcons::new(ctx, "white")?;
         let black_icons = PieceIcons::new(ctx, "black")?;
 
@@ -94,7 +90,7 @@ impl<T: bridge::ChessGame> MainState<T> {
         }
         let board = Mesh::from_data(ctx, board_builder.build());
 
-        Ok(MainState {
+        Ok(BoardView {
             frames: 0,
             game,
             board,
@@ -111,7 +107,7 @@ impl<T: bridge::ChessGame> MainState<T> {
     }
 }
 
-impl<T: bridge::ChessGame> event::EventHandler<ggez::GameError> for MainState<T> {
+impl<T: bridge::ChessGame> View for BoardView<T> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         if let Some(server_game) = self.game.get_if_server() {
             match server_game.get_protocol_state() {
@@ -393,29 +389,4 @@ impl<T: bridge::ChessGame> event::EventHandler<ggez::GameError> for MainState<T>
         Ok(())
     }
 
-}
-
-fn main() {
-    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-        let mut path = PathBuf::from(manifest_dir);
-        path.push("resources");
-        path
-    } else {
-        PathBuf::from("./resources")
-    };
-
-    let builder = ContextBuilder::new("alvinw-chess-gui", "alvinw")
-        .window_setup(WindowSetup::default().title("alvinw-chess-gui"))
-        .window_mode(WindowMode::default()
-            .resizable(true)
-        )
-        .add_resource_path(resource_dir);
-    
-    let (mut ctx, event_loop) = builder.build().expect("Failed to start ggez.");
-
-    let game = erikfran_chess::Game::new();
-    let server_game = server::ServerGame::new(game, 8384);
-
-    let state = MainState::new(&mut ctx, server_game).expect("Failed to create MainState.");
-    event::run(ctx, event_loop, state);
 }
