@@ -114,14 +114,23 @@ impl ChessGame for ClientGame {
         self.current_turn
     }
 
-    fn promote(&mut self, promotion_square: Square, piece: PieceTypes) {
+    fn promote(&mut self, _promotion_square: Square, _piece: PieceTypes) {
 
     }
 
     fn possible_moves(&mut self, at: Square) -> Result<(BoardMove, Vec<Move>), MoveError> {
         if !self.server_features.contains(&Features::PossibleMoveGeneration) {
-            panic!("Possible move generation must be supported by the server.");
-            // TODO highlight all tiles when no possible move generation is available
+            let mut board_move = BoardMove { rows: Rows { squares: [Rows { squares: [None; 8] }; 8] } };
+            for file in 0..8 {
+                for rank in 0..8 {
+                    let square = (file, rank).try_into().unwrap();
+                    board_move[square] = Some(Move::Normal {
+                        from: at,
+                        to: square,
+                    });
+                }
+            }
+            return Ok((board_move, vec![]));
         }
         let mut board_move = BoardMove { rows: Rows { squares: [Rows { squares: [None; 8] }; 8] } };
         for mv in &self.moves {

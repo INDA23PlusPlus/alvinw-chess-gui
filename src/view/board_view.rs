@@ -1,7 +1,6 @@
 use erikfran_chess::{util::{Square, BoardMove, Rank}, PieceTypes, MoveError, Move, CastlingSide};
-use ggez::{ContextBuilder, event::{self, MouseButton}, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, conf::{WindowSetup, WindowMode}, glam::Vec2};
+use ggez::{event::MouseButton, Context, GameResult, graphics::{self, Image, MeshBuilder, FillOptions, Rect, Color, Mesh, Text, DrawParam}, glam::Vec2};
 use crate::bridge;
-use crate::server::{ProtocolState, ServerGame};
 use crate::view::View;
 
 const SQUARE_SIZE: f32 = 64.0;

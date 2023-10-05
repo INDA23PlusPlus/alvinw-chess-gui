@@ -2,7 +2,6 @@
 //! regardless of backend.
 
 use erikfran_chess::{Piece, util::{Square, BoardMove}, Color, Move, PieceTypes, MoveError};
-use crate::server::ServerGame;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GameState {

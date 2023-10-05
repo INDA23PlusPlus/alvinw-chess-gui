@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Read;
 use std::net::TcpListener;
 
 use chess_network_protocol::{ServerToClient, Joever, ClientToServerHandshake, ServerToClientHandshake, Piece as ProtocolPiece, Move as ProtocolMove, Features, ClientToServer};
@@ -48,6 +48,8 @@ impl ServerGame {
             self.client = Some(JsonTcpStream::new(stream));
             self.protocol_state = ProtocolState::Handshake;
             println!("{} connected", addr);
+        } else {
+            println!("{:?}", res);
         }
     }
 
