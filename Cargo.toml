@@ -11,3 +11,4 @@ chess-network-protocol = { git = "https://github.com/INDA23PlusPlus/chess-networ
 ggez = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+local-ip-address = "0.5.6"

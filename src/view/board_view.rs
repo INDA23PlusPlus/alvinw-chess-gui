@@ -109,13 +109,7 @@ impl<T: bridge::ChessGame> BoardView<T> {
 
 impl<T: bridge::ChessGame> View for BoardView<T> {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
-        if let Some(server_game) = self.game.get_if_server() {
-            match server_game.get_protocol_state() {
-                ProtocolState::NotConnected => server_game.try_accept_client(),
-                ProtocolState::Handshake => server_game.try_handshake(),
-                _ => {},
-            }
-        }
+        self.game.update();
         Ok(())
     }
 

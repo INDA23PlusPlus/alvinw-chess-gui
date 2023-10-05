@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use ggez::event::{EventHandler, MouseButton};
 use ggez::{Context, GameError, GameResult};
 
@@ -5,7 +6,7 @@ pub mod main_menu;
 pub mod board_view;
 
 pub struct MainState{
-    current_view: Box<dyn View>,
+    current_view: RefCell<Box<dyn View>>,
 }
 
 pub trait View {
@@ -31,28 +32,29 @@ impl View for NoopView {
 
 impl MainState {
     pub fn new() -> Self {
-        Self { current_view: Box::new(NoopView {}) }
+        Self { current_view: RefCell::new(Box::new(NoopView {})) }
     }
 
-    pub fn set_view(&mut self, view: impl View + 'static) {
-        self.current_view = Box::new(view);
+    pub fn set_view(&self, view: impl View + 'static) {
+        let mut v = self.current_view.borrow_mut();
+        *v = Box::new(view);
     }
 }
 
 impl EventHandler<GameError> for MainState {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.current_view.update(ctx)
+        self.current_view.borrow_mut().update(ctx)
     }
 
     fn draw(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.current_view.draw(ctx)
+        self.current_view.borrow_mut().draw(ctx)
     }
 
     fn mouse_button_down_event(&mut self, ctx: &mut Context, button: MouseButton, x: f32, y: f32) -> GameResult {
-        self.current_view.mouse_button_down_event(ctx, button, x, y)
+        self.current_view.borrow_mut().mouse_button_down_event(ctx, button, x, y)
     }
 
     fn mouse_motion_event(&mut self, ctx: &mut Context, x: f32, y: f32, dx: f32, dy: f32) -> Result<(), GameError> {
-        self.current_view.mouse_motion_event(ctx, x, y, dx, dy)
+        self.current_view.borrow_mut().mouse_motion_event(ctx, x, y, dx, dy)
     }
 }

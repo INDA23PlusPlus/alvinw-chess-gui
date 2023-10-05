@@ -11,6 +11,8 @@ pub enum GameState {
 }
 
 pub trait ChessGame {
+    fn update(&mut self);
+
     fn get_pieces(&self) -> [[Option<Piece>; 8]; 8];
 
     fn get_piece(&self, at: Square) -> Option<Piece>;
@@ -26,7 +28,4 @@ pub trait ChessGame {
     fn possible_moves(&mut self, at: Square) -> Result<(BoardMove, Vec<Move>), MoveError>;
 
     fn perform_move(&mut self, mv: Move) -> Result<(), MoveError>;
-
-    /// Get the ServerGame instance of the game is running as a server.
-    fn get_if_server(&mut self) -> Option<&mut ServerGame>;
 }

@@ -53,14 +53,14 @@ impl Button {
 }
 
 pub struct MainMenu<'a> {
-    main_state: &'a mut MainState,
+    main_state: &'a MainState,
     frames: usize,
     single_player_button: Button,
     host_button: Button,
 }
 
 impl<'a> MainMenu<'a> {
-    pub fn new(main_state: &'a mut MainState) -> Self {
+    pub fn new(main_state: &'a MainState) -> Self {
         Self {
             main_state,
             frames: 0,

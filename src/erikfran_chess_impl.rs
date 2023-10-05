@@ -53,7 +53,7 @@ impl bridge::ChessGame for erikfran_chess::Game {
         self.try_move(mv)
     }
 
-    fn get_if_server(&mut self) -> Option<&mut ServerGame> {
-        None
+    fn update(&mut self) {
+
     }
 }
