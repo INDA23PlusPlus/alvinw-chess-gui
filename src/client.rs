@@ -68,16 +68,25 @@ impl ChessGame for ClientGame {
             Some(packet) => packet,
             None => return,
         };
-        println!("Got {:?}", packet);
 
         match packet {
-            ServerToClient::State { board, moves, move_made: _move_made, joever } => {
+            ServerToClient::State { board, moves, joever, .. } => {
                 self.set_board(board);
                 self.moves = moves;
                 self.joever = joever;
-                self.current_turn = Color::White;
+                // If it was the server's turn and the server sent State it means the server
+                // has made its move. If it was our turn and we just made a move, State means
+                // that the move was accepted and its now the server's turn.
+                self.current_turn = self.current_turn.opposite();
             }
-            ServerToClient::Error { .. } => {}
+            ServerToClient::Error { board, moves, joever, message } => {
+                // The server rejected out move. This means we need to make a move again.
+                self.current_turn = Color::White;
+                self.set_board(board);
+                self.moves = moves;
+                self.joever = joever;
+                println!("error message = {}", message);
+            }
             ServerToClient::Resigned { .. } => {}
             ServerToClient::Draw { .. } => {}
         }
@@ -110,6 +119,10 @@ impl ChessGame for ClientGame {
     }
 
     fn possible_moves(&mut self, at: Square) -> Result<(BoardMove, Vec<Move>), MoveError> {
+        if !self.server_features.contains(&Features::PossibleMoveGeneration) {
+            panic!("Possible move generation must be supported by the server.");
+            // TODO highlight all tiles when no possible move generation is available
+        }
         let mut board_move = BoardMove { rows: Rows { squares: [Rows { squares: [None; 8] }; 8] } };
         for mv in &self.moves {
             let from: Square = (mv.start_x as i32, mv.start_y as i32).try_into().unwrap();

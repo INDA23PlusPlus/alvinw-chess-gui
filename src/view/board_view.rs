@@ -334,7 +334,7 @@ impl<T: bridge::ChessGame> View for BoardView<T> {
                         self.latest_error = None;
                         match mv {
                             Move::Normal { from: _, to } => {
-                                let is_pawn: bool = self.game.get_piece(to).map_or(false, |piece| piece.piece == PieceTypes::Pawn(true));
+                                let is_pawn: bool = self.game.get_piece(to).map_or(false, |piece| match piece.piece { PieceTypes::Pawn(_) => true, _ => false });
                                 if (to.rank == Rank::R1 || to.rank == Rank::R8) && is_pawn {
                                     // Promotion
                                     self.promotion_square = Some(to);
