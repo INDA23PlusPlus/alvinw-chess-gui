@@ -27,4 +27,8 @@ pub trait ChessGame {
     fn possible_moves(&mut self, at: Square) -> Result<(BoardMove, Vec<Move>), MoveError>;
 
     fn perform_move(&mut self, mv: Move) -> Result<(), MoveError>;
+
+    fn can_play_right_now(&self) -> bool;
+
+    fn has_possible_moves(&self) -> bool;
 }

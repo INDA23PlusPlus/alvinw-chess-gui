@@ -151,6 +151,13 @@ impl ChessGame for ClientGame {
         Ok(())
     }
 
+    fn can_play_right_now(&self) -> bool {
+        self.current_turn == Color::White
+    }
+
+    fn has_possible_moves(&self) -> bool {
+        self.server_features.contains(&Features::PossibleMoveGeneration)
+    }
 }
 
 fn convert_piece(protocol_piece: ProtocolPiece) -> Option<Piece> {

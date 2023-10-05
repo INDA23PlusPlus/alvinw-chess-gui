@@ -1,7 +1,7 @@
 use std::net::TcpListener;
 
-use chess_network_protocol::{ServerToClient, Joever, ClientToServerHandshake, ServerToClientHandshake, Piece as ProtocolPiece, Move as ProtocolMove, Features, ClientToServer};
-use erikfran_chess::{Move, MoveError, Piece, PieceTypes};
+use chess_network_protocol::{ServerToClient, Joever, ClientToServerHandshake, ServerToClientHandshake, Piece as ProtocolPiece, Move as ProtocolMove, Color as ProtocolColor, Features, ClientToServer};
+use erikfran_chess::{Color, Move, MoveError, Piece, PieceTypes};
 use erikfran_chess::util::{BoardMove, Square};
 
 use crate::bridge::{self, ChessGame};
@@ -13,6 +13,7 @@ pub struct ServerGame {
     client: Option<JsonTcpStream>,
     protocol_state: ProtocolState,
     last_move_made: Option<ProtocolMove>,
+    server_color: Color,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -32,6 +33,7 @@ impl ServerGame {
             client: None,
             protocol_state: ProtocolState::NotConnected,
             last_move_made: None,
+            server_color: Color::Black,
         }
     }
 
@@ -58,6 +60,11 @@ impl ServerGame {
         let handshake: ClientToServerHandshake = match stream.read() {
             Some(handshake) => handshake,
             None => return,
+        };
+
+        self.server_color = match handshake.server_color {
+            ProtocolColor::White => Color::White,
+            ProtocolColor::Black => Color::Black,
         };
 
         println!("Got handshake {:?}", handshake);
@@ -170,6 +177,10 @@ impl bridge::ChessGame for ServerGame {
         // TODO networking
     }
 
+    fn can_play_right_now(&self) -> bool {
+        self.game.turn == self.server_color
+    }
+
     // Delegate informational methods to the erikfran chess backend.
 
     fn get_pieces(&self) -> [[Option<Piece>; 8]; 8] {
@@ -195,6 +206,10 @@ impl bridge::ChessGame for ServerGame {
     fn current_turn(&self) -> erikfran_chess::Color {
         self.game.current_turn()
     }
+
+    fn has_possible_moves(&self) -> bool {
+        true
+    }
 }
 
 fn convert_piece(erikfran_piece: Option<Piece>) -> ProtocolPiece {
@@ -218,7 +233,7 @@ fn convert_piece(erikfran_piece: Option<Piece>) -> ProtocolPiece {
                 PieceTypes::King => ProtocolPiece::BlackKing,
             }
         }
-    }   
+    }
 }
 
 fn convert_board(erikfran_board: [[Option<Piece>; 8]; 8]) -> [[ProtocolPiece; 8]; 8] {

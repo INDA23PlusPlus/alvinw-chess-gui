@@ -155,7 +155,7 @@ impl<T: bridge::ChessGame> View for BoardView<T> {
                     canvas.draw(image, draw_param);
                 }
                 if let Some(possible_moves) = self.possible_moves {
-                    if possible_moves[square].is_some() {
+                    if possible_moves[square].is_some() && self.game.has_possible_moves() {
                         let sin = ((self.frames as f64) / 25.0).sin() + 1.0;
                         let green = (sin * 32.0) as u8 + 192;
                         let radius = (sin * 2.0 + 16.0) as f32;
@@ -280,6 +280,10 @@ impl<T: bridge::ChessGame> View for BoardView<T> {
         x: f32,
         y: f32,
     ) -> GameResult {
+        if !self.game.can_play_right_now() {
+            return Ok(());
+        }
+
         if let (Some(promotion_square), Some(coords)) = (self.promotion_square, &self.promotion_coordinates) {
             let size = SQUARE_SIZE * self.scale;
             let clicked_inside = |piece_pos: Vec2| -> bool {

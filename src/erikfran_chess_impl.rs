@@ -55,4 +55,13 @@ impl bridge::ChessGame for erikfran_chess::Game {
     fn update(&mut self) {
 
     }
+
+    fn can_play_right_now(&self) -> bool {
+        // Local games control both sides
+        true
+    }
+
+    fn has_possible_moves(&self) -> bool {
+        true
+    }
 }
