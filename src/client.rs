@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 use chess_network_protocol::{ClientToServerHandshake, Color as ProtocolColor, Joever, Piece as ProtocolPiece, Move as ProtocolMove, ServerToClient, ServerToClientHandshake, Features, ClientToServer};
 use erikfran_chess::{Color, Move, MoveError, Piece, PieceTypes};

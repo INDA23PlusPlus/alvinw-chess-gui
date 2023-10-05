@@ -59,8 +59,10 @@ pub struct MainMenu<'a> {
     host_button: Button,
 }
 
+#[deprecated]
 impl<'a> MainMenu<'a> {
-    pub fn new(main_state: &'a MainState) -> Self {
+    #[deprecated]
+    pub fn _new(main_state: &'a MainState) -> Self {
         Self {
             main_state,
             frames: 0,

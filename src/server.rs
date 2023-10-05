@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::net::TcpListener;
 
 use chess_network_protocol::{ServerToClient, Joever, ClientToServerHandshake, ServerToClientHandshake, Piece as ProtocolPiece, Move as ProtocolMove, Features, ClientToServer};
@@ -38,10 +37,6 @@ impl ServerGame {
 
     pub fn get_protocol_state(&self) -> ProtocolState { self.protocol_state }
 
-    pub fn is_client_connected(&self) -> bool {
-        self.client.is_some()
-    }
-
     pub fn try_accept_client(&mut self) {
         let res = self.listener.accept();
         if let Ok((stream, addr)) = res {
@@ -49,7 +44,7 @@ impl ServerGame {
             self.protocol_state = ProtocolState::Handshake;
             println!("{} connected", addr);
         } else {
-            println!("{:?}", res);
+            // println!("{:?}", res);
         }
     }
 

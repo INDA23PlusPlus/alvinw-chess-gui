@@ -6,7 +6,7 @@ use std::time::Duration;
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::{ContextBuilder, event};
 use crate::view::board_view::BoardView;
-use crate::view::{MainState, View};
+use crate::view::MainState;
 use local_ip_address::local_ip;
 use crate::client::ClientGame;
 use crate::server::{ProtocolState, ServerGame};
